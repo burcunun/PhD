@@ -23,7 +23,7 @@ def embed_wrapper(ls):
     results = [r.tolist() for r in results]
     return results
 
-def search(es,query, field, type='match', index_name=None, embedder=None, size=50):
+def search(es,query, field, type='match', index_name=None, embedder=None, size=1000):
     """
     Search elastic
     Args:
