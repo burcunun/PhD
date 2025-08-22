@@ -2,10 +2,10 @@ certifi==2024.2.2
 elasticsearch==8.13.1
 Flask==3.0.3
 flask_cors==4.0.1
-matplotlib==3.8.4
+matplotlib
 nltk==3.8.1
-numpy==1.26.4
-pandas==2.2.2
+numpy
+pandas
 pymongo==4.7.2
 python-dotenv==1.0.1
 sentence_transformers==2.7.0

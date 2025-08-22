@@ -17,7 +17,7 @@ def download_xml(page_beg, page_end):
     while page <= page_end:
         print("--- Downloading Page " + str(page) + " ---")
         try:
-            r = requests.get(page_name + str(page) + "&num=100&srt=Relevance:decreasing&format=xml", timeout=120)
+            r = requests.get(page_name + str(page) + "&num=50&srt=Relevance:decreasing&format=xml", timeout=120)
             open("./downloads/cordis_" + str(page) + ".xml", 'wb').write(r.content)
             total_file_size += Path("./downloads/cordis_" + str(page) + ".xml").stat().st_size
             print(total_file_size)
@@ -110,88 +110,105 @@ def outputWrong(filename):
     print("--- Done ---")
 
 def crawlByKeyword(jsonItems, keyword):
-    url = "https://search.trdizin.gov.tr/tr/proje/ara?q="+keyword+"&searchName=&order=year-DESC&page=1&limit=200&view=json"
-    x = requests.get(url)
-    resultsJson = json.loads(x.text)
-    records = resultsJson["records"]
+    pageNum = 1
+    while True:
+        url = "https://search.trdizin.gov.tr/api/defaultSearch/publication/?q="+keyword+"&order=publicationYear-DESC&page="+str(pageNum)+"&limit=100&facet-documentType=PROJECT"
+        x = requests.get(url)
+        resultsJson = json.loads(x.text)
+        if "error" not in resultsJson:
+            records = resultsJson["hits"]["hits"]
+            if len(records) <= 0:
+                break
+            pageNum+=1;
 
-    for record in records:
-        item = {}
-        _id = "tub-"+record["id"]
-        if _id not in jsonItems:
-            item["_id"] = _id
-            if len(record["languageContext"]) > 1:
-                item["title"] = record["languageContext"][1]["title"]
-                if "abstract" in record["languageContext"][1]:
-                    item["summary"] = record["languageContext"][1]["abstract"]
-                elif "abstract" in record["languageContext"][0]:
-                    item["summary"] = record["languageContext"][0]["abstract"]
-                else:
-                    item["summary"] = record["abstract"]
-            else:
-                item["title"] = record["languageContext"][0]["title"]
-                if "abstract" in record["languageContext"][0]:
-                    item["summary"] = record["languageContext"][0]["abstract"]
-                else:
-                    item["summary"] = record["abstract"]
-            if "Projede öz verilmemiştir" in item["summary"]:
-                continue
-            item["endDate"] = datetime.strptime(record["endDate"].split("T")[0], "%Y-%m-%d").strftime("%Y-%m-%d")
-            if "keyword" in record["languageContext"][0]:
-                item["keywords"] = record["languageContext"][0]["keyword"]
-                if any("Projede anahtar kelime verilmemiştir" in s for s in item["keywords"]):
-                    item["keywords"] = []
-            else:
-                item["keywords"] = []
-            item["language"] = record["languageContext"][0]["publicationLanguage"]
-            item["source"] = record["trdizinUrl"]
-            item["totalCost"] = ""
-            item["ecMaxContribution"] = ""
-            item["duration"] = ""
-            item["database"] = "TUBITAK"
-            if(record["pdfLink"] != ""):
-                item["pdfLink"] = record["pdfLink"]
-            else:
-                item["pdfLink"] = ""
-            jsonItems[_id] = item
+            for record in records:
+                item = {}
+                _id = "tub-"+record["_id"]
+                if _id not in jsonItems:
+                    item["_id"] = _id
+                    if len(record["_source"]["abstracts"]) > 1:
+                        item["title"] = record["_source"]["abstracts"][1]["title"]
+                        if "abstract" in record["_source"]["abstracts"][1]:
+                            item["summary"] = record["_source"]["abstracts"][1]["abstract"]
+                        elif "abstract" in record["_source"]["abstracts"][0]:
+                            item["summary"] = record["_source"]["abstracts"][0]["abstract"]
+                        else:
+                            item["summary"] = ""
+                        if "keywords" in record["_source"]["abstracts"][1]:
+                            item["keywords"] = record["_source"]["abstracts"][1]["keywords"]
+                            if item["keywords"] is None or any("Projede anahtar kelime verilmemiştir" in s for s in item["keywords"]):
+                                item["keywords"] = []
+                        elif "keywords" in record["_source"]["abstracts"][0]:
+                            item["keywords"] = record["_source"]["abstracts"][0]["keywords"]
+                            if item["keywords"] is None or any("Projede anahtar kelime verilmemiştir" in s for s in item["keywords"]):
+                                item["keywords"] = []
+                        else:
+                            item["keywords"] = []
+                    else:
+                        item["title"] = record["_source"]["abstracts"][0]["title"]
+                        if "abstract" in record["_source"]["abstracts"][0]:
+                            item["summary"] = record["_source"]["abstracts"][0]["abstract"]
+                        else:
+                            item["summary"] = ""
+                        if "keywords" in record["_source"]["abstracts"][0]:
+                            item["keywords"] = record["_source"]["abstracts"][0]["keywords"]
+                            if item["keywords"] is None or any("Projede anahtar kelime verilmemiştir" in s for s in item["keywords"]):
+                                item["keywords"] = []
+                        else:
+                            item["keywords"] = []
+                    if "Projede öz verilmemiştir" in item["summary"]:
+                        continue
+                    item["endDate"] = datetime.strptime(record["_source"]["endDate"].split("T")[0], "%Y-%m-%d").strftime("%Y-%m-%d")
+                    
+                    item["language"] = record["_source"]["language"]
+                    item["source"] = "https://search.trdizin.gov.tr/tr/yayin/detay/"+str(record["_id"])
+                    item["totalCost"] = ""
+                    item["ecMaxContribution"] = ""
+                    item["duration"] = ""
+                    item["database"] = "TUBITAK"
+                    item["pdfLink"] = ""
+                    jsonItems[_id] = item
+        else:
+            break
 
-download_xml(1, 48000)
+# download_xml(550, 4000)
 
-for i in range(1,47):
-    items = []
-    wrongItems = []
-    converter(i*1000+1,(i+1)*1000)
-    outputJson("./output/output_"+str(i+1)+".json")
-items = []
-crawlByKeyword(jsonItems, "mcda")
-print("mcda bitti")
-crawlByKeyword(jsonItems, "mcdm")
-print("mcdm bitti")
-crawlByKeyword(jsonItems, "çkkv")
-print("çkkv bitti")
-crawlByKeyword(jsonItems, "innovation")
-print("innovation bitti")
-crawlByKeyword(jsonItems, "inovasyon")
-print("inovasyon bitti")
-crawlByKeyword(jsonItems, "sürdürülebilirlik")
-print("sürdürülebilirlik bitti")
-crawlByKeyword(jsonItems, "sustainability")
-print("sustainability bitti")
-crawlByKeyword(jsonItems, "çok kriterli")
-print("çok kriterli bitti")
-crawlByKeyword(jsonItems, "multicriteria")
-print("multicriteria bitti")
-crawlByKeyword(jsonItems, "multi-criteria")
-print("multi-criteria bitti")
-crawlByKeyword(jsonItems, "multi criteria")
-print("multi criteria bitti")
-crawlByKeyword(jsonItems, "topsis")
-print("topsis bitti")
-crawlByKeyword(jsonItems, "ahd")
-print("ahd bitti")
-items.extend(jsonItems.values())
+# for i in range(0,4):
+#     items = []
+#     wrongItems = []
+#     converter(i*1000+1,(i+1)*1000)
+#     outputJson("./output/output_"+str(i+1)+".json")
+# print(jsonItems)
+# items = []
+# crawlByKeyword(jsonItems, "mcda")
+# print("mcda bitti")
+# crawlByKeyword(jsonItems, "mcdm")
+# print("mcdm bitti")
+# crawlByKeyword(jsonItems, "çkkv")
+# print("çkkv bitti")
+# crawlByKeyword(jsonItems, "innovation")
+# print("innovation bitti")
+# crawlByKeyword(jsonItems, "inovasyon")
+# print("inovasyon bitti")
+# crawlByKeyword(jsonItems, "sürdürülebilirlik")
+# print("sürdürülebilirlik bitti")
+# crawlByKeyword(jsonItems, "sustainability")
+# print("sustainability bitti")
+# crawlByKeyword(jsonItems, "çok kriterli")
+# print("çok kriterli bitti")
+# crawlByKeyword(jsonItems, "multicriteria")
+# print("multicriteria bitti")
+# crawlByKeyword(jsonItems, "multi-criteria")
+# print("multi-criteria bitti")
+# crawlByKeyword(jsonItems, "multi criteria")
+# print("multi criteria bitti")
+# crawlByKeyword(jsonItems, "topsis")
+# print("topsis bitti")
+# crawlByKeyword(jsonItems, "ahd")
+# print("ahd bitti")
+# items.extend(jsonItems.values())
 
-outputJson("./output/output_trdizin.json")
+# outputJson("./output/output_trdizin.json")
 
 items = []
 
@@ -206,7 +223,8 @@ def inputJson(filename):
         items.extend(json.load(f))
     print("--- Done ---")
 
-for i in range(47):
+for i in range(4):
+    print(i)
     inputJson("./output/output_"+str(i+1)+".json")
 inputJson("./output/output_trdizin.json")
 outputJson("publishes.json")
